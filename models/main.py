@@ -1,0 +1,181 @@
+import pandas as pd
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from imblearn.over_sampling import SMOTE
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+
+
+def load_and_preprocess_data(filepath):
+    print(f"Loading data from {filepath}...")
+    try:
+        df = pd.read_excel(filepath)
+    except FileNotFoundError:
+        # Fallback for relative path if running from models/
+        df = pd.read_excel(os.path.join('../Data', os.path.basename(filepath)))
+        
+    # Rename columns for clarity
+    # Expected columns based on inspection: 'Review', 'positive=1/negative=0'
+    # We map 'positive=1/negative=0' to 'label'
+    
+    # Check for correct columns
+    if 'positive=1/negative=0' in df.columns:
+        df = df.rename(columns={'Review': 'text', 'positive=1/negative=0': 'label'})
+    else:
+        # Fallback or error
+        print("Required columns not found. Printing columns:")
+        print(df.columns)
+        raise ValueError("Column 'positive=1/negative=0' not found")
+
+    # Drop NaNs
+    df = df.dropna(subset=['text', 'label'])
+    
+    # Ensure label is int
+    df['label'] = df['label'].astype(int)
+    
+    # Check distribution
+    print("Label distribution before split:")
+    print(df['label'].value_counts(normalize=True))
+    
+    return df
+
+def train_and_evaluate(models, X_train, y_train, X_test, y_test):
+    results = []
+    
+    for name, model in models.items():
+        print(f"\nTraining {name}...")
+        model.fit(X_train, y_train)
+        
+        print(f"Evaluating {name}...")
+        
+        # Predictions
+        y_train_pred = model.predict(X_train)
+        y_test_pred = model.predict(X_test)
+        
+        # Test Metrics
+        acc = accuracy_score(y_test, y_test_pred)
+        f1 = f1_score(y_test, y_test_pred)
+        
+        results.append({
+            'Model': name,
+            'Accuracy': acc,
+            'F1-Score': f1
+        })
+        
+        print(f"Accuracy: {acc:.4f}, F1-Score: {f1:.4f}")
+        print(classification_report(y_test, y_test_pred))
+        
+        safe_name = name.replace(" ", "_").replace("/", "_")
+        
+        # Create a figure with 3 subplots
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        fig.suptitle(f'{name} Performance Analysis', fontsize=16)
+
+        # 1. Train Confusion Matrix
+        cm_train = confusion_matrix(y_train, y_train_pred)
+        sns.heatmap(cm_train, annot=True, fmt='d', cmap='Blues', ax=axes[0])
+        axes[0].set_title('Train Confusion Matrix')
+        axes[0].set_ylabel('True Label')
+        axes[0].set_xlabel('Predicted Label')
+
+        # 2. Test Confusion Matrix
+        cm_test = confusion_matrix(y_test, y_test_pred)
+        sns.heatmap(cm_test, annot=True, fmt='d', cmap='Greens', ax=axes[1])
+        axes[1].set_title('Test Confusion Matrix')
+        axes[1].set_ylabel('True Label')
+        axes[1].set_xlabel('Predicted Label')
+
+        # 3. Test Per-Class F1 Score Bar Chart
+        clf_report = classification_report(y_test, y_test_pred, output_dict=True)
+        # Check keys - they are usually strings '0', '1' unless target_names is passed
+        f1_class_0 = clf_report['0']['f1-score']
+        f1_class_1 = clf_report['1']['f1-score']
+        
+        metrics = ['Class 0 F1', 'Class 1 F1']
+        values = [f1_class_0, f1_class_1]
+        
+        sns.barplot(x=metrics, y=values, hue=metrics, palette='viridis', ax=axes[2], legend=False)
+        axes[2].set_ylim(0, 1.1)
+        axes[2].set_title('Test F1-Score per Class')
+        axes[2].set_ylabel('F1-Score')
+        
+        # Add values on top of bars
+        for i, v in enumerate(values):
+            axes[2].text(i, v + 0.02, f'{v:.4f}', ha='center', fontweight='bold')
+            
+        plt.tight_layout()
+        os.makedirs('results', exist_ok=True)
+        plt.savefig(f'results/{safe_name}_combined.png')
+        plt.close()
+        
+    return pd.DataFrame(results)
+
+def main():
+    filepath = 'Data/restaurant_reviews-v2-1.xlsx'
+    # Adjust path if script is run from project root
+    if not os.path.exists(filepath):
+         filepath = os.path.join('..', filepath)
+         
+    df = load_and_preprocess_data(filepath)
+    
+    # 1. Data Split (80% Train, 20% Test, Stratified)
+    print("\nSplitting data...")
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+        df['text'], df['label'], 
+        test_size=0.2, 
+        stratify=df['label'], 
+        random_state=42,
+        shuffle=True
+    )
+    
+    print(f"Train size: {len(X_train_raw)}, Test size: {len(X_test_raw)}")
+    
+    print("\nVerifying Stratified Split (Class Distribution):")
+    print("Train Set Distribution:")
+    print(y_train.value_counts(normalize=True))
+    print("Test Set Distribution:")
+    print(y_test.value_counts(normalize=True))
+    
+    # 2. Preprocessing & Vectorization
+    print("\nVectorizing text...")
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+    X_train_vec = vectorizer.fit_transform(X_train_raw)
+    X_test_vec = vectorizer.transform(X_test_raw)
+    
+    # 3. Apply SMOTE to training data
+    print("\nApplying SMOTE to balance the training set...")
+    smote = SMOTE(random_state=42)
+    X_train_resampled, y_train_resampled = smote.fit_resample(X_train_vec, y_train)
+    
+    print("New Train Set Distribution after SMOTE:")
+    print(y_train_resampled.value_counts(normalize=True))
+    
+    # 4. Model Selection
+    # - Logistic Regression (Classic)
+    # - Random Forest (Classic Ensemble)
+    # - MLP Classifier (Deep Learning - Neural Network)
+    models = {
+        'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
+        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
+        'MLP / Neural Network': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, random_state=42)
+    }
+    
+    # 5. Training & Fine-tuning (MLP trains iteratively) & 6. Evaluation
+    results_df = train_and_evaluate(models, X_train_resampled, y_train_resampled, X_test_vec, y_test)
+    
+    print("\n=== Final Results Table ===")
+    print(results_df)
+    
+    # Save results to CSV (optional but good practice)
+    os.makedirs('results', exist_ok=True)
+    results_df.to_csv('results/comparison_metrics.csv', index=False)
+    print("\nResults and plots saved to results/")
+
+if __name__ == "__main__":
+    main()
