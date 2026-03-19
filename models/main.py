@@ -11,7 +11,7 @@ from imblearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report, precision_score, recall_score
 import warnings
 
 
@@ -111,23 +111,34 @@ def train_and_evaluate(models, X_train, y_train, X_test, y_test):
         y_train_pred = model.predict(X_train)
         y_test_pred = model.predict(X_test)
         
+        # Training Metrics
+        train_acc = accuracy_score(y_train, y_train_pred)
+        train_f1 = f1_score(y_train, y_train_pred)
+        
         # Test Metrics
         acc = accuracy_score(y_test, y_test_pred)
         f1 = f1_score(y_test, y_test_pred)
+        precision = precision_score(y_test, y_test_pred)
+        recall = recall_score(y_test, y_test_pred)
         
         results.append({
             'Model': name,
-            'Accuracy': acc,
-            'F1-Score': f1
+            'Train Accuracy': train_acc,
+            'Train F1': train_f1,
+            'Test Accuracy': acc,
+            'Test F1-Score': f1,
+            'Test Precision': precision,
+            'Test Recall': recall
         })
         
-        print(f"Accuracy: {acc:.4f}, F1-Score: {f1:.4f}")
+        print(f"Train Accuracy: {train_acc:.4f}, Train F1: {train_f1:.4f}")
+        print(f"Test Accuracy: {acc:.4f}, Test F1: {f1:.4f}")
         print(classification_report(y_test, y_test_pred))
         
         safe_name = name.replace(" ", "_").replace("/", "_")
         
         # Create a figure with 3 subplots
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        fig, axes = plt.subplots(1, 4, figsize=(24, 5))
         fig.suptitle(f'{name} Performance Analysis', fontsize=16)
 
         # 1. Train Confusion Matrix
@@ -144,7 +155,23 @@ def train_and_evaluate(models, X_train, y_train, X_test, y_test):
         axes[1].set_ylabel('True Label')
         axes[1].set_xlabel('Predicted Label')
 
-        # 3. Test Per-Class F1 Score Bar Chart
+        # 3. Traing Per-Class F1 Score Bar Chart
+        clf_report_train = classification_report(y_train, y_train_pred, output_dict=True)
+        f1_class_0_train = clf_report_train['0']['f1-score']
+        f1_class_1_train = clf_report_train['1']['f1-score']
+        
+        metrics_train = ['Class 0 F1', 'Class 1 F1']
+        values_train = [f1_class_0_train, f1_class_1_train]
+        
+        sns.barplot(x=metrics_train, y=values_train, hue=metrics_train, palette='Blues', ax=axes[2], legend=False)
+        axes[2].set_ylim(0, 1.1)
+        axes[2].set_title('Train F1-Score per Class')
+        axes[2].set_ylabel('F1-Score')
+        
+        for i, v in enumerate(values_train):
+            axes[2].text(i, v + 0.02, f'{v:.4f}', ha='center', fontweight='bold')
+
+        # 4. Test Per-Class F1 Score Bar Chart
         clf_report = classification_report(y_test, y_test_pred, output_dict=True)
         # Check keys - they are usually strings '0', '1' unless target_names is passed
         f1_class_0 = clf_report['0']['f1-score']
@@ -153,14 +180,14 @@ def train_and_evaluate(models, X_train, y_train, X_test, y_test):
         metrics = ['Class 0 F1', 'Class 1 F1']
         values = [f1_class_0, f1_class_1]
         
-        sns.barplot(x=metrics, y=values, hue=metrics, palette='viridis', ax=axes[2], legend=False)
-        axes[2].set_ylim(0, 1.1)
-        axes[2].set_title('Test F1-Score per Class')
-        axes[2].set_ylabel('F1-Score')
+        sns.barplot(x=metrics, y=values, hue=metrics, palette='viridis', ax=axes[3], legend=False)
+        axes[3].set_ylim(0, 1.1)
+        axes[3].set_title('Test F1-Score per Class')
+        axes[3].set_ylabel('F1-Score')
         
         # Add values on top of bars
         for i, v in enumerate(values):
-            axes[2].text(i, v + 0.02, f'{v:.4f}', ha='center', fontweight='bold')
+            axes[3].text(i, v + 0.02, f'{v:.4f}', ha='center', fontweight='bold')
             
         plt.tight_layout()
         os.makedirs('results', exist_ok=True)
@@ -257,7 +284,7 @@ def main():
     # print("\nApplying SMOTE to full training set for final model training...")
     # smote = SMOTE(random_state=SEED)
     # X_train_resampled, y_train_resampled = smote.fit_resample(X_train_vec, y_train)
-    j
+    
     # print("New Train Set Distribution after SMOTE:")
     # print(y_train_resampled.value_counts(normalize=True))
 

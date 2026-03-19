@@ -38,7 +38,8 @@ Best CV F1: 0.8859
 
 Training Logistic Regression...
 Evaluating Logistic Regression...
-Accuracy: 0.9231, F1-Score: 0.9286
+Train Accuracy: 1.0000, Train F1: 1.0000
+Test Accuracy: 0.9231, Test F1: 0.9286
               precision    recall  f1-score   support
 
            0       0.96      0.88      0.92        25
@@ -51,7 +52,8 @@ weighted avg       0.93      0.92      0.92        52
 
 Training Random Forest...
 Evaluating Random Forest...
-Accuracy: 0.9231, F1-Score: 0.9286
+Train Accuracy: 0.9808, Train F1: 0.9811
+Test Accuracy: 0.9231, Test F1: 0.9286
               precision    recall  f1-score   support
 
            0       0.96      0.88      0.92        25
@@ -64,7 +66,8 @@ weighted avg       0.93      0.92      0.92        52
 
 Training MLP / Neural Network...
 Evaluating MLP / Neural Network...
-Accuracy: 0.8846, F1-Score: 0.8929
+Train Accuracy: 1.0000, Train F1: 1.0000
+Test Accuracy: 0.8846, Test F1: 0.8929
               precision    recall  f1-score   support
 
            0       0.91      0.84      0.88        25
@@ -76,9 +79,9 @@ weighted avg       0.89      0.88      0.88        52
 
 
 === Final Results Table ===
-                  Model  Accuracy  F1-Score
-0   Logistic Regression  0.923077  0.928571
-1         Random Forest  0.923077  0.928571
-2  MLP / Neural Network  0.884615  0.892857
+                  Model  Train Accuracy  Train F1  Test Accuracy  Test F1-Score  Test Precision  Test Recall
+0   Logistic Regression        1.000000  1.000000       0.923077       0.928571        0.896552     0.962963
+1         Random Forest        0.980769  0.981132       0.923077       0.928571        0.896552     0.962963
+2  MLP / Neural Network        1.000000  1.000000       0.884615       0.892857        0.862069     0.925926
 
 Results and plots saved to results/
