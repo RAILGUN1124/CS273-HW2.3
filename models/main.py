@@ -3,14 +3,22 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+import optuna
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.feature_extraction.text import TfidfVectorizer
 from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+import warnings
 
+
+SEED = 1935990857
+# Suppress warnings for cleaner output
+warnings.filterwarnings('ignore')
+optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 def load_and_preprocess_data(filepath):
     print(f"Loading data from {filepath}...")
@@ -44,6 +52,51 @@ def load_and_preprocess_data(filepath):
     print(df['label'].value_counts(normalize=True))
     
     return df
+
+def objective(trial, model_name, X, y):
+    """
+    Optuna objective function for hyperparameter tuning.
+    Uses Pipeline(SMOTE, Classifier) to prevent data leakage.
+    """
+    if model_name == 'Logistic Regression':
+        C = trial.suggest_float('C', 1e-4, 1e2, log=True)
+        # Using lbfgs solver (default) which supports l2
+        clf = LogisticRegression(C=C, max_iter=1000, random_state=SEED)
+        
+    elif model_name == 'Random Forest':
+        n_estimators = trial.suggest_int('n_estimators', 50, 300)
+        max_depth = trial.suggest_int('max_depth', 5, 50)
+        min_samples_split = trial.suggest_int('min_samples_split', 2, 10)
+        clf = RandomForestClassifier(
+            n_estimators=n_estimators, 
+            max_depth=max_depth, 
+            min_samples_split=min_samples_split, 
+            random_state=SEED
+        )
+        
+    elif model_name == 'MLP / Neural Network':
+        hidden_layer_sizes = trial.suggest_categorical('hidden_layer_sizes', [(50,), (100,), (50, 50), (100, 50)])
+        learning_rate_init = trial.suggest_float('learning_rate_init', 1e-4, 1e-1, log=True)
+        alpha = trial.suggest_float('alpha', 1e-5, 1e-2, log=True)
+        clf = MLPClassifier(
+            hidden_layer_sizes=hidden_layer_sizes, 
+            learning_rate_init=learning_rate_init,
+            alpha=alpha,
+            max_iter=500, 
+            random_state=SEED
+        )
+    
+    # Pipeline: SMOTE -> Classifier
+    pipeline = Pipeline([
+        ('tfidf', TfidfVectorizer(stop_words='english', max_features=5000)),
+        ('smote', SMOTE(random_state=SEED)),
+        ('model', clf)
+    ])
+    
+    # 5-fold CV maximizing F1-score
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+    scores = cross_val_score(pipeline, X, y, cv=cv, scoring='f1')
+    return scores.mean()
 
 def train_and_evaluate(models, X_train, y_train, X_test, y_test):
     results = []
@@ -130,7 +183,7 @@ def main():
         df['text'], df['label'], 
         test_size=0.2, 
         stratify=df['label'], 
-        random_state=42,
+        random_state=SEED,
         shuffle=True
     )
     
@@ -143,31 +196,74 @@ def main():
     print(y_test.value_counts(normalize=True))
     
     # 2. Preprocessing & Vectorization
-    print("\nVectorizing text...")
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
-    X_train_vec = vectorizer.fit_transform(X_train_raw)
-    X_test_vec = vectorizer.transform(X_test_raw)
+    # print("\nVectorizing text...")
+    # vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+    # # X_train_vec = vectorizer.fit_transform(X_train_raw)
+    # # X_test_vec = vectorizer.transform(X_test_raw)
     
-    # 3. Apply SMOTE to training data
-    print("\nApplying SMOTE to balance the training set...")
-    smote = SMOTE(random_state=42)
-    X_train_resampled, y_train_resampled = smote.fit_resample(X_train_vec, y_train)
+    # 4. Hyperparameter Tuning with Optuna
+    print("\n=== Hyperparameter Tuning with Optuna ===")
     
-    print("New Train Set Distribution after SMOTE:")
-    print(y_train_resampled.value_counts(normalize=True))
-    
-    # 4. Model Selection
-    # - Logistic Regression (Classic)
-    # - Random Forest (Classic Ensemble)
-    # - MLP Classifier (Deep Learning - Neural Network)
-    models = {
-        'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
-        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
-        'MLP / Neural Network': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, random_state=42)
-    }
-    
-    # 5. Training & Fine-tuning (MLP trains iteratively) & 6. Evaluation
-    results_df = train_and_evaluate(models, X_train_resampled, y_train_resampled, X_test_vec, y_test)
+    model_names = ['Logistic Regression', 'Random Forest', 'MLP / Neural Network']
+    best_models = {}
+
+    for model_name in model_names:
+        print(f"\n--- Tuning {model_name} ---")
+        
+        sampler = optuna.samplers.TPESampler(seed=SEED)
+        study = optuna.create_study(direction='maximize', sampler=sampler)
+        
+        study.optimize(
+            lambda trial: objective(trial, model_name, X_train_raw, y_train),
+            n_trials=50   # reduce from 100 → less overfitting
+        )
+        
+        print(f"Best params: {study.best_params}")
+        print(f"Best CV F1: {study.best_value:.4f}")
+
+        # Rebuild model with best params
+        if model_name == 'Logistic Regression':
+            clf = LogisticRegression(
+                C=study.best_params['C'],
+                max_iter=1000,
+                random_state=SEED
+            )
+            
+        elif model_name == 'Random Forest':
+            clf = RandomForestClassifier(
+                n_estimators=study.best_params['n_estimators'],
+                max_depth=study.best_params['max_depth'],
+                min_samples_split=study.best_params['min_samples_split'],
+                random_state=SEED
+            )
+            
+        elif model_name == 'MLP / Neural Network':
+            clf = MLPClassifier(
+                hidden_layer_sizes=study.best_params['hidden_layer_sizes'],
+                learning_rate_init=study.best_params['learning_rate_init'],
+                alpha=study.best_params['alpha'],
+                max_iter=500,
+                random_state=SEED
+            )
+
+        # ✅ FINAL pipeline (same as CV!)
+        best_models[model_name] = Pipeline([
+            ('tfidf', TfidfVectorizer(stop_words='english', max_features=5000)),
+            ('smote', SMOTE(random_state=SEED)),
+            ('model', clf)
+        ])
+            
+    # # 3. Apply SMOTE to training data (Separate step for Final Training)
+    # print("\nApplying SMOTE to full training set for final model training...")
+    # smote = SMOTE(random_state=SEED)
+    # X_train_resampled, y_train_resampled = smote.fit_resample(X_train_vec, y_train)
+    j
+    # print("New Train Set Distribution after SMOTE:")
+    # print(y_train_resampled.value_counts(normalize=True))
+
+    # 5. Training & Evaluation
+    print("\n=== Final Training & Evaluation ===")
+    results_df = train_and_evaluate(best_models, X_train_raw, y_train, X_test_raw, y_test)
     
     print("\n=== Final Results Table ===")
     print(results_df)

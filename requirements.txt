@@ -5,3 +5,4 @@ matplotlib
 seaborn
 imbalanced-learn
 openpyxl
+optuna

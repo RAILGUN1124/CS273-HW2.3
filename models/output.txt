@@ -1,0 +1,84 @@
+Loading data from ../Data/restaurant_reviews-v2-1.xlsx...
+Label distribution before split:
+label
+1    0.519231
+0    0.480769
+Name: proportion, dtype: float64
+
+Splitting data...
+Train size: 208, Test size: 52
+
+Verifying Stratified Split (Class Distribution):
+Train Set Distribution:
+label
+1    0.519231
+0    0.480769
+Name: proportion, dtype: float64
+Test Set Distribution:
+label
+1    0.519231
+0    0.480769
+Name: proportion, dtype: float64
+
+=== Hyperparameter Tuning with Optuna ===
+
+--- Tuning Logistic Regression ---
+Best params: {'C': 18.359188831489444}
+Best CV F1: 0.8703
+
+--- Tuning Random Forest ---
+Best params: {'n_estimators': 288, 'max_depth': 15, 'min_samples_split': 9}
+Best CV F1: 0.8197
+
+--- Tuning MLP / Neural Network ---
+Best params: {'hidden_layer_sizes': (100,), 'learning_rate_init': 0.012072590929667174, 'alpha': 0.009464689377939593}
+Best CV F1: 0.8859
+
+=== Final Training & Evaluation ===
+
+Training Logistic Regression...
+Evaluating Logistic Regression...
+Accuracy: 0.9231, F1-Score: 0.9286
+              precision    recall  f1-score   support
+
+           0       0.96      0.88      0.92        25
+           1       0.90      0.96      0.93        27
+
+    accuracy                           0.92        52
+   macro avg       0.93      0.92      0.92        52
+weighted avg       0.93      0.92      0.92        52
+
+
+Training Random Forest...
+Evaluating Random Forest...
+Accuracy: 0.9231, F1-Score: 0.9286
+              precision    recall  f1-score   support
+
+           0       0.96      0.88      0.92        25
+           1       0.90      0.96      0.93        27
+
+    accuracy                           0.92        52
+   macro avg       0.93      0.92      0.92        52
+weighted avg       0.93      0.92      0.92        52
+
+
+Training MLP / Neural Network...
+Evaluating MLP / Neural Network...
+Accuracy: 0.8846, F1-Score: 0.8929
+              precision    recall  f1-score   support
+
+           0       0.91      0.84      0.88        25
+           1       0.86      0.93      0.89        27
+
+    accuracy                           0.88        52
+   macro avg       0.89      0.88      0.88        52
+weighted avg       0.89      0.88      0.88        52
+
+
+=== Final Results Table ===
+                  Model  Accuracy  F1-Score
+0   Logistic Regression  0.923077  0.928571
+1         Random Forest  0.923077  0.928571
+2  MLP / Neural Network  0.884615  0.892857
+
+Results and plots saved to results/
