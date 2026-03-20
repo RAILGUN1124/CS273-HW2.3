@@ -21,67 +21,68 @@ label
 Name: proportion, dtype: float64
 
 === Hyperparameter Tuning with Optuna ===
+WordNet lemmatization enabled: False
 
 --- Tuning Logistic Regression ---
-Best params: {'C': 18.359188831489444}
-Best CV F1: 0.8703
+Best params: {'C': 0.041719073036318735}
+Best CV F1: 0.8672
 
 --- Tuning Random Forest ---
-Best params: {'n_estimators': 288, 'max_depth': 15, 'min_samples_split': 9}
-Best CV F1: 0.8197
+Best params: {'n_estimators': 194, 'max_depth': 43, 'min_samples_split': 4}
+Best CV F1: 0.8247
 
 --- Tuning MLP / Neural Network ---
-Best params: {'hidden_layer_sizes': (100,), 'learning_rate_init': 0.012072590929667174, 'alpha': 0.009464689377939593}
-Best CV F1: 0.8859
+Best params: {'hidden_layer_sizes': (100,), 'learning_rate_init': 0.0001022290223156557, 'alpha': 0.0005716673253050196}
+Best CV F1: 0.8726
 
 === Final Training & Evaluation ===
 
 Training Logistic Regression...
 Evaluating Logistic Regression...
-Train Accuracy: 1.0000, Train F1: 1.0000
-Test Accuracy: 0.9231, Test F1: 0.9286
+Train Accuracy: 0.9856, Train F1: 0.9862
+Test Accuracy: 0.9231, Test F1: 0.9259
               precision    recall  f1-score   support
 
-           0       0.96      0.88      0.92        25
-           1       0.90      0.96      0.93        27
+           0       0.92      0.92      0.92        25
+           1       0.93      0.93      0.93        27
 
     accuracy                           0.92        52
-   macro avg       0.93      0.92      0.92        52
-weighted avg       0.93      0.92      0.92        52
+   macro avg       0.92      0.92      0.92        52
+weighted avg       0.92      0.92      0.92        52
 
 
 Training Random Forest...
 Evaluating Random Forest...
-Train Accuracy: 0.9808, Train F1: 0.9811
-Test Accuracy: 0.9231, Test F1: 0.9286
+Train Accuracy: 1.0000, Train F1: 1.0000
+Test Accuracy: 0.9615, Test F1: 0.9615
               precision    recall  f1-score   support
 
-           0       0.96      0.88      0.92        25
-           1       0.90      0.96      0.93        27
+           0       0.93      1.00      0.96        25
+           1       1.00      0.93      0.96        27
 
-    accuracy                           0.92        52
-   macro avg       0.93      0.92      0.92        52
-weighted avg       0.93      0.92      0.92        52
+    accuracy                           0.96        52
+   macro avg       0.96      0.96      0.96        52
+weighted avg       0.96      0.96      0.96        52
 
 
 Training MLP / Neural Network...
 Evaluating MLP / Neural Network...
 Train Accuracy: 1.0000, Train F1: 1.0000
-Test Accuracy: 0.8846, Test F1: 0.8929
+Test Accuracy: 0.9423, Test F1: 0.9455
               precision    recall  f1-score   support
 
-           0       0.91      0.84      0.88        25
-           1       0.86      0.93      0.89        27
+           0       0.96      0.92      0.94        25
+           1       0.93      0.96      0.95        27
 
-    accuracy                           0.88        52
-   macro avg       0.89      0.88      0.88        52
-weighted avg       0.89      0.88      0.88        52
+    accuracy                           0.94        52
+   macro avg       0.94      0.94      0.94        52
+weighted avg       0.94      0.94      0.94        52
 
 
 === Final Results Table ===
                   Model  Train Accuracy  Train F1  Test Accuracy  Test F1-Score  Test Precision  Test Recall
-0   Logistic Regression        1.000000  1.000000       0.923077       0.928571        0.896552     0.962963
-1         Random Forest        0.980769  0.981132       0.923077       0.928571        0.896552     0.962963
-2  MLP / Neural Network        1.000000  1.000000       0.884615       0.892857        0.862069     0.925926
+0   Logistic Regression        0.985577  0.986175       0.923077       0.925926        0.925926     0.925926
+1         Random Forest        1.000000  1.000000       0.961538       0.961538        1.000000     0.925926
+2  MLP / Neural Network        1.000000  1.000000       0.942308       0.945455        0.928571     0.962963
 
 Results and plots saved to results/

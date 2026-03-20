@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 import os
+import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 import optuna
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.feature_extraction.text import TfidfVectorizer
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTE, RandomOverSampler
 from imblearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -16,9 +17,68 @@ import warnings
 
 
 SEED = 1935990857
+USE_WORDNET_LEMMATIZATION = False
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+
+def ensure_wordnet_resources():
+    """Download WordNet resources only when lemmatization is enabled."""
+    import nltk
+
+    nltk.download('wordnet', quiet=True)
+    nltk.download('omw-1.4', quiet=True)
+
+
+def build_tfidf_vectorizer(use_wordnet=False):
+    if not use_wordnet:
+        # return TfidfVectorizer(stop_words='english', max_features=5000)
+        return TfidfVectorizer(
+            lowercase=True,
+            ngram_range=(1, 2), 
+            min_df=2,
+            max_df=0.9,
+            sublinear_tf=True,
+            max_features=5000,
+            stop_words=None  # or custom list that keeps "not", "no", "never"
+        )
+
+    try:
+        from nltk.stem import WordNetLemmatizer
+    except ImportError as exc:
+        raise ImportError(
+            "WordNet lemmatization requires nltk. Install it with: pip install nltk"
+        ) from exc
+
+    ensure_wordnet_resources()
+    lemmatizer = WordNetLemmatizer()
+
+    # Keep tokenization lightweight and deterministic without extra NLTK tokenizers.
+    def wordnet_tokenizer(text):
+        tokens = re.findall(r"\b\w+\b", str(text).lower())
+        return [lemmatizer.lemmatize(token) for token in tokens]
+
+    return TfidfVectorizer(
+        stop_words='english',
+        max_features=5000,
+        tokenizer=wordnet_tokenizer,
+        token_pattern=None
+    )
+
+
+# def build_model_pipeline(clf, use_wordnet=False):
+#     return Pipeline([
+#         ('tfidf', build_tfidf_vectorizer(use_wordnet=use_wordnet)),
+#         ('smote', SMOTE(random_state=SEED)),
+#         ('model', clf)
+#     ])
+def build_model_pipeline(clf, use_wordnet=False):
+    return Pipeline([
+        ('tfidf', build_tfidf_vectorizer(use_wordnet=use_wordnet)),
+        ('oversample', RandomOverSampler(random_state=SEED)),
+        ('model', clf)
+    ])
 
 def load_and_preprocess_data(filepath):
     print(f"Loading data from {filepath}...")
@@ -53,7 +113,7 @@ def load_and_preprocess_data(filepath):
     
     return df
 
-def objective(trial, model_name, X, y):
+def objective(trial, model_name, X, y, use_wordnet=False):
     """
     Optuna objective function for hyperparameter tuning.
     Uses Pipeline(SMOTE, Classifier) to prevent data leakage.
@@ -61,7 +121,7 @@ def objective(trial, model_name, X, y):
     if model_name == 'Logistic Regression':
         C = trial.suggest_float('C', 1e-4, 1e2, log=True)
         # Using lbfgs solver (default) which supports l2
-        clf = LogisticRegression(C=C, max_iter=1000, random_state=SEED)
+        clf = LogisticRegression(C=C, max_iter=1000, random_state=SEED, class_weight='balanced')
         
     elif model_name == 'Random Forest':
         n_estimators = trial.suggest_int('n_estimators', 50, 300)
@@ -71,7 +131,7 @@ def objective(trial, model_name, X, y):
             n_estimators=n_estimators, 
             max_depth=max_depth, 
             min_samples_split=min_samples_split, 
-            random_state=SEED
+            random_state=SEED, class_weight='balanced'
         )
         
     elif model_name == 'MLP / Neural Network':
@@ -86,12 +146,8 @@ def objective(trial, model_name, X, y):
             random_state=SEED
         )
     
-    # Pipeline: SMOTE -> Classifier
-    pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer(stop_words='english', max_features=5000)),
-        ('smote', SMOTE(random_state=SEED)),
-        ('model', clf)
-    ])
+    # Pipeline: TF-IDF -> SMOTE -> Classifier
+    pipeline = build_model_pipeline(clf, use_wordnet=use_wordnet)
     
     # 5-fold CV maximizing F1-score
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
@@ -230,6 +286,7 @@ def main():
     
     # 4. Hyperparameter Tuning with Optuna
     print("\n=== Hyperparameter Tuning with Optuna ===")
+    print(f"WordNet lemmatization enabled: {USE_WORDNET_LEMMATIZATION}")
     
     model_names = ['Logistic Regression', 'Random Forest', 'MLP / Neural Network']
     best_models = {}
@@ -241,7 +298,13 @@ def main():
         study = optuna.create_study(direction='maximize', sampler=sampler)
         
         study.optimize(
-            lambda trial: objective(trial, model_name, X_train_raw, y_train),
+            lambda trial: objective(
+                trial,
+                model_name,
+                X_train_raw,
+                y_train,
+                use_wordnet=USE_WORDNET_LEMMATIZATION
+            ),
             n_trials=50   # reduce from 100 → less overfitting
         )
         
@@ -253,7 +316,8 @@ def main():
             clf = LogisticRegression(
                 C=study.best_params['C'],
                 max_iter=1000,
-                random_state=SEED
+                random_state=SEED,
+                class_weight='balanced'
             )
             
         elif model_name == 'Random Forest':
@@ -261,7 +325,8 @@ def main():
                 n_estimators=study.best_params['n_estimators'],
                 max_depth=study.best_params['max_depth'],
                 min_samples_split=study.best_params['min_samples_split'],
-                random_state=SEED
+                random_state=SEED,
+                class_weight='balanced'
             )
             
         elif model_name == 'MLP / Neural Network':
@@ -270,15 +335,14 @@ def main():
                 learning_rate_init=study.best_params['learning_rate_init'],
                 alpha=study.best_params['alpha'],
                 max_iter=500,
-                random_state=SEED
+                random_state=SEED,
             )
 
-        # ✅ FINAL pipeline (same as CV!)
-        best_models[model_name] = Pipeline([
-            ('tfidf', TfidfVectorizer(stop_words='english', max_features=5000)),
-            ('smote', SMOTE(random_state=SEED)),
-            ('model', clf)
-        ])
+        # Final pipeline (same as CV)
+        best_models[model_name] = build_model_pipeline(
+            clf,
+            use_wordnet=USE_WORDNET_LEMMATIZATION
+        )
             
     # # 3. Apply SMOTE to training data (Separate step for Final Training)
     # print("\nApplying SMOTE to full training set for final model training...")
